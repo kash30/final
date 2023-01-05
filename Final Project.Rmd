@@ -1,0 +1,292 @@
+---
+title: "Final Project"
+date: "December 15, 2020"
+author: "Kashish Gujral"
+output: html_notebook
+---
+
+### Load Packages
+```{r}
+#Loading Packages we need for the project
+
+library(rvest)
+library(tidyverse)
+library(genius)
+library(tidytext) 
+library(dplyr)
+library(ggplot2)
+library(gridExtra) #installed using install.packages("gridExtra")
+
+
+```
+
+### Load Data
+```{r}
+
+#Loading Data required
+data("stop_words")
+data("sentiments")
+
+#Extra words given
+rubric_stop_words <- 
+  c('ba', 'du', 'yeah', 'da', 'ya', 'ooh', 'gonna', 'na', 'uh', 'la', 'hol')
+
+```
+
+
+### STEP ONE
+### Data Access
+#### scraping the Grammy nominated Records of the Year from 1980 through 2019 using website. Then copying the path for the table and then creating a table of songs for each decade. There are many NA values so we filter those out using the filter function.
+
+### 1980
+```{r}
+# read webpage for Grammy Awards
+webpage <- read_html("https://en.wikipedia.org/wiki/Grammy_Award_for_Record_of_the_Year")
+
+
+# copy xpath for table of 1980s
+XPATH80 <- '/html/body/div[3]/div[3]/div[5]/div[1]/table[5]'
+
+# run the following to create table of songs from 1980s
+table_1980 <- 
+  webpage %>%
+  html_nodes(xpath = XPATH80) %>%
+  html_table(fill = TRUE)
+
+d1980 <- table_1980[[1]] %>%
+  filter(!is.na(Record)) #filtering all NA values
+
+```
+
+### 1990
+```{r}
+# read webpage for Grammy Awards
+webpage <- read_html("https://en.wikipedia.org/wiki/Grammy_Award_for_Record_of_the_Year")
+
+# copy xpath for table of 1990s
+XPATH90 <- '/html/body/div[3]/div[3]/div[5]/div[1]/table[6]'
+
+# run the following to create table of songs from 1990s
+table_1990 <- 
+  webpage %>%
+  html_nodes(xpath = XPATH90) %>%
+  html_table(fill = TRUE)
+
+d1990 <- table_1990[[1]] %>%
+  filter(!is.na(Record)) #filtering all NA values
+
+```
+
+### 2000
+```{r}
+# read webpage for Grammy Awards
+webpage <- read_html("https://en.wikipedia.org/wiki/Grammy_Award_for_Record_of_the_Year")
+
+# copy xpath for table of 2000s
+XPATH00 <- '/html/body/div[3]/div[3]/div[5]/div[1]/table[7]'
+
+# run the following to create table of songs from 2000s
+table_2000 <- 
+  webpage %>%
+  html_nodes(xpath = XPATH00) %>%
+  html_table(fill = TRUE)
+
+d2000 <- table_2000[[1]] %>%
+  filter(!is.na(Record)) #filtering all NA values
+
+```
+
+### 2010
+```{r}
+# read webpage for Grammy Awards
+webpage <- read_html("https://en.wikipedia.org/wiki/Grammy_Award_for_Record_of_the_Year")
+
+# copy xpath for table of 2010s
+XPATH10 <- '/html/body/div[3]/div[3]/div[5]/div[1]/table[8]'
+
+# run the following to create table of songs from 2010s
+table_2010 <- 
+  webpage %>%
+  html_nodes(xpath = XPATH10) %>%
+  html_table(fill = TRUE)
+
+d2010 <- table_2010[[1]] %>%
+  filter(!is.na(Record)) #filtering all NA values
+
+```
+
+### STEP TWO
+#### After getting the four decade tables,  combining them into one data frame using the join function and cleaning the data. We rename some variables to other names using the rename function while cleaning up some of the originals by removing the [I] in year and (s) in artist, remove the footnotes next to each year value using the extract function in the regular expression. Then keeping just three of the four variables that we really need (i.e. drop production team) using the select function.
+```{r}
+#combining the four tables to one data frame using JOIN
+x1 <- full_join(d1980, d1990)
+x2 <- full_join(x1, d2000)
+x3 <- full_join(x2, d2010)
+
+#renaming some variables
+x3 <-
+  x3 %>%
+  rename(Year = `Year[I]` , artist = `Artist(s)`, track = Record) %>%
+  select(Year, track, artist)
+
+x3 <-
+  extract(Year, 'Year' , regex("(1-9){4}\\[(1-9){2}\\]"))
+  
+
+```
+
+### STEP THREE
+#### Now that we have our data all tidy, we Add lyrics from the genius package.
+```{r}
+
+#adding lyrics from genius package
+lyrics <- x3 %>%
+  add_genius(artist, track, type = "lyrics") 
+
+```
+
+### GRAPH 1
+#### For this graph, we can see the number of words per song for each year. 
+```{r}
+
+ggplot(lyrics) +
+ aes(x = Year, y = line, fill = Year) +
+ geom_boxplot() +
+ scale_fill_hue() +
+ labs(x = "Decade", y = "Words per Song", title = "Boxplots of words per Grammy Nominated Songs by decade") +
+ theme_minimal() +
+ theme(legend.position = "none")
+
+  
+```
+```{r}
+
+verse_words <- lyrics %>%
+  unnest_tokens(word, lyric)
+
+#Removing the stop words
+ft <- verse_words %>%
+  anti_join(stop_words)
+
+#Filtering more words, 11 extra words
+topten <- ft %>%
+  count(word, sort = TRUE) %>%
+  filter(n >= 3) %>%
+  #filter(word %notin% rubric_stop_words) %>% 
+  filter(word !='ba', word != 'du', word != 'yeah', word != 'da', word != 'ya', word != 'ooh', word != 'gonna', word != 'na', word != 'uh', word != 'la', word != 'hol') %>%
+  top_n(10)
+```
+
+
+### GRAPH 2
+#### For this graph , we can see the count of the most popular 10 words used in a Grammy Nominated Soong from 1980 to 2019
+```{r}
+#creating bar graph with x=word and y=count of the word
+ggplot(topten) +
+ aes(x = word, weight = n) +
+ geom_bar(fill = "#9ecae1") +
+ labs(x = "Word", y = "Count", title = "Ten Most Popular Words of Grammy Nominated Songs from 1980 - 2019") +
+ theme_minimal()
+
+
+```
+#### GRAPH 3
+#### Top Ten words by decade
+#### for graph three , had to make four graphs each for each decade with the ten most popular words used in that decade. So I made four tables filtered the ten years per decade and then joined the remaining with the top ten words table. And then created a bar graph with x = word and y = count
+```{r}
+
+#joining with top ten words for the 1980s
+tt1 <- verse_word %>%
+   filter(Year %in% c("1980[44]", "1981[45]", "1982[46]", "1983[47]", "1984[48]", "1985[49]", "1986[50]", "1987[51]", "1988[52]", "1989[53]")) %>%
+  inner_join(topten)
+
+#graphing for top ten words in 1980s - bar graph
+ggplot(tt1) +
+ aes(x = word) +
+ geom_bar(fill = "red") +
+ labs(x = "Word", y = "Count", title = "1980s") +
+ theme_minimal()
+
+#joining with top ten words for 1990s
+tt2 <- verse_word %>%
+   filter(Year %in% c("1990[54]", "1991[55]", "1992[56]", "1993[57]", "1994[58]", "1995[59]", "1996[60]", "1997[61]", "1998[62]", "1999[63]")) %>%
+  inner_join(topten)
+
+#creating a bar graph for the count of most popular ten words used in 1990s
+ggplot(tt2) +
+ aes(x = word) +
+ geom_bar(fill = "yellow") +
+ labs(x = "Word", y = "Count", title = "1990s") +
+ theme_minimal()
+
+#joining with top ten words for 2000s
+tt3 <- verse_word %>%
+   filter(Year %in% c("2000[64]", "2001[65]", "2002[66]", "2003[67]", "2004[68]", "2005[69]", "2006[70]", "2007[71]", "2008[72]", "2009[73]")) %>%
+  inner_join(topten)
+
+#graphing for top ten words in 2000s - bar graph
+ggplot(tt3) +
+ aes(x = word) +
+ geom_bar(fill = "green") +
+ labs(x = "Word", y = "Count", title = "2000s") +
+ theme_minimal()
+
+#joining with top ten words for 2010s
+tt4 <- verse_word %>%
+   filter(Year %in% c("2010[74]", "2011[75]", "2012[76]", "2013[77]", "2014[78]", "2015[79]", "2016[80]", "2017[81]", "2018[82]", "2019[83]")) %>%
+  inner_join(topten) 
+
+#graphing for top ten words in 2010s - bar graph
+ggplot(tt4) +
+ aes(x = word) +
+ geom_bar(fill = "blue") +
+ labs(x = "Word", y = "Count", title = "2010s") +
+ theme_minimal()
+
+```
+#### GRAPH 4
+#### Net Sentiment Score by Year
+#### For this, joined the two tables sentiments and tf and then created a bar graph with x = year y= new sentiments and then grouped it by year. the title of the graph reads as net sentiments score by year
+```{r}
+
+#joining with sentiments
+tf <- verse_words %>%
+  inner_join(sentiments)
+
+
+ggplot(tf) +
+ aes(x = sentiment, fill = Year, group = Year) +
+ geom_bar() +
+ labs(x= "Year", y = "Net Sentiment", title = "Net Sentiment Score by Year") +
+ scale_fill_hue() +
+ theme_minimal() +
+ facet_grid(vars(), vars(Year))
+
+```
+
+
+```{r}
+#GRAPH 5
+tf %>%
+  select(Year, sentiment, word) %>%
+  group_by(Year)%>%
+  mutate(recode(positive, 1, as.factor, as.numeric=TRUE, levels)) %>%
+  summarise(mean(sentiment))
+```
+
+#### GRAPH 6
+#### Net Sentiment Score by Year of Grammy Nominated Records from 1980 - 2019 with Linear Model Fit
+#### Used used geom point and geom smooth for the desired graph and then title the graph as Net Sentiment Score by Year of Grammy Nominated Records from 1980 - 2019 with Linear Model Fit and For this, did x = year, y = sentiment and grouped them by year.
+```{r}
+ggplot(tf,aes(x=Year, y=sentiment, group = Year, color = Year)) +
+   labs(x= "Year", y = "Net Sentiment", title = " Net Sentiment Score by Year of Grammy Nominated Records from 1980 - 2019 with Linear Model Fit") +
+   geom_point(shape=1) +
+   geom_smooth(method=lm, na.rm = TRUE, fullrange= TRUE,
+               aes(group=1),colour="blue")+
+   facet_grid(vars(Year) +
+   scale_colour_brewer(palette="black"))
+
+```
+
+#### EXTRA CREDIT
+#### Github Link : http://kashish.github.io/stat%20final.nb.html
